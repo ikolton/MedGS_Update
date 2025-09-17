@@ -1,0 +1,106 @@
+import torch
+import numpy as np
+from scene import Scene
+import os
+from tqdm import tqdm
+from os import makedirs
+from gaussian_renderer import render
+import torchvision
+from utils.general_utils import safe_state
+from argparse import ArgumentParser
+from arguments import ModelParams, PipelineParams, get_combined_args
+from models import gaussianModelRender
+from PIL import Image
+
+
+def modify_func(means3D: torch.Tensor, # num_gauss x 3, means3D[:,1] = 0
+                scales: torch.Tensor, # num_gauss x 3, scales[:,1] = eps
+                rotations: torch.Tensor, # # num_gauss x 4, 3D quaternions of 2D rotations
+                time: float):
+    return means3D, scales, rotations
+
+def render_set( model_path,
+                iteration,
+                views, 
+                gaussians, 
+                pipeline, 
+                background, 
+                interp, 
+                extension,
+                generate_points_path,
+                mask_path):
+
+    render_dir_masked = os.path.join(model_path, "render_masked")
+    render_dir = os.path.join(model_path, "render")
+
+    if mask_path != "-1":
+        os.makedirs(render_dir_masked, exist_ok=True)
+    else:
+        os.makedirs(render_dir, exist_ok=True)
+
+    for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
+        for i in range(interp):
+            mask_means = None
+            if mask_path != "-1":
+                file_path = os.path.join(mask_path, "means3Dmasked", f"{idx:05d}.pt")
+                mask_means = torch.load(file_path)[:, [0, -1]]
+
+            rendering = render(
+                view, gaussians, pipeline, background,
+                interp=interp, interp_idx=i, modify_func=modify_func,
+                idx=idx, generate_points_path=generate_points_path, mask_means=mask_means, train=False
+            )["render"].cpu()
+
+            render_path = render_dir_masked if mask_path != "-1" else render_dir
+            file_name = f"{idx:05d}_{i}{extension}"
+            torchvision.utils.save_image(rendering, os.path.join(render_path, file_name))
+
+def render_sets(dataset : ModelParams,
+                iteration : int, 
+                pipeline : PipelineParams, 
+                skip_train : bool, 
+                skip_test : bool, 
+                interp : int,
+                extension: str,
+                generate_points_path,
+                mask_path):
+    with torch.no_grad():
+        gaussians = gaussianModelRender['gs'](dataset.sh_degree)
+        scene = Scene(dataset, gaussians, load_iteration=iteration, shuffle=False)
+
+        bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
+        background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
+
+        render_set(dataset.model_path, scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background, interp, extension, generate_points_path, mask_path)
+
+if __name__ == "__main__":
+    # Set up command line argument parser
+    parser = ArgumentParser(description="Testing script parameters")
+    model = ModelParams(parser, sentinel=True)
+    pipeline = PipelineParams(parser)
+    parser.add_argument("--iteration", default=-1, type=int)
+    parser.add_argument('--camera', type=str, default="mirror")
+    parser.add_argument("--distance", type=float, default=1.0)
+    parser.add_argument("--num_pts", type=int, default=100_000)
+    parser.add_argument("--skip_train", action="store_false")
+    parser.add_argument("--skip_test", action="store_true")
+    parser.add_argument("--quiet", action="store_true")
+    parser.add_argument("--poly_degree", type=int, default=1)
+    parser.add_argument("--interp", type=int, default=1)
+    parser.add_argument("--extension", type=str, default=".png")
+    parser.add_argument("--mask_path", type=str, default="-1")
+    parser.add_argument("--generate_points_path", type=str, default="-1")
+
+    args = get_combined_args(parser)
+    model.gs_type = "gs"
+    model.camera = args.camera
+    model.distance = args.distance
+    model.num_pts = args.num_pts
+    model.poly_degree = args.poly_degree
+
+    print("Rendering " + args.model_path)
+
+    # Initialize system state (RNG)
+    safe_state(args.quiet)
+
+    render_sets(model.extract(args), args.iteration, pipeline.extract(args), args.skip_train, args.skip_test, args.interp, args.extension, generate_points_path = args.generate_points_path, mask_path=args.mask_path)
