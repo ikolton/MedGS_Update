@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SCRIPT LAST TESTED: 19.09.2025 on wsl2 Ubuntu 22.04 + conda and cuda 11.7
 # MedGS setup & pipeline runner for WSL + conda
 # Follows the README steps. CUDA auto-detection removed — set TORCH_CUDA_CHANNEL below.
 # Run from the repo root (where train.py and requirements.txt live).
@@ -9,15 +10,15 @@ set -euo pipefail
 ENV_NAME="medgs"          # name of the conda environment that will be created/used
 PY_VER="3.8"              # python version for the conda environment
 
-DO_INSTALL=0              # 1 = install dependencies, 0 = skip (useful if already installed)
+DO_INSTALL=1              # 1 = install dependencies, 0 = skip (useful if already installed)
 
-DATASET_DIR="" #"./data/prostate"            # path to your training dataset (folder with original/0000.png etc.)
+DATASET_DIR="./data/prostate"            # path to your training dataset (folder with original/0000.png etc.)
 MODEL_DIR="./output/prostate"              # path where training outputs (model checkpoints, renderings) will be saved
 
 PIPELINE_MODE="seg"          # "img" (default) or "seg" — type of training/rendering pipeline
-RENDER_INTERP="1"         # interpolation factor during rendering (1 = no interpolation, 2 = double frames, etc.)
+RENDER_INTERP="8"         # interpolation factor during rendering (1 = no interpolation, 2 = double frames, etc.)
 
-TRAIN_USE_SEG=01          # 1 = train on segmentation pipeline (binary masks), 0 = normal images
+TRAIN_USE_SEG=1          # 1 = train on segmentation pipeline (binary masks), 0 = normal images
 TRAIN_RANDOM_BG=0         # 1 = randomize background, 0 = keep dataset background
 TRAIN_POLY_DEGREE=""      # polynomial degree for folded gaussians (empty = default)
 TRAIN_BATCH_SIZE=""       # training batch size (empty = default)
@@ -25,7 +26,7 @@ TRAIN_BATCH_SIZE=""       # training batch size (empty = default)
 MESH_INPUT="./output"             # parent directory containing case/model subfolders with seg/render/*.png
 MESH_OUTPUT="./output/mesh"            # directory where .ply meshes will be saved
 MESH_THRESH="150"         # iso-level threshold for marching cubes
-INTER="1"               # interpolation factor for mesh generation (1 = no interpolation, 2 = double frames, etc.)
+INTER="8"               # interpolation factor for mesh generation (1 = no interpolation, 2 = double frames, etc.)
 
 # ---- PyTorch CUDA wheel channel (manual) ----
 # Valid options (per PyTorch download site):
@@ -109,6 +110,7 @@ install_deps() {
 run_training() {
   [[ -n "$DATASET_DIR" ]] || die "Training requested but --dataset not provided."
   [[ -n "$MODEL_DIR"   ]] || die "Training requested but --model-out not provided."
+  mkdir -p "$MODEL_DIR"
 
   cmd=(python3 train.py -s "$DATASET_DIR" -m "$MODEL_DIR")
   if [[ $TRAIN_USE_SEG -eq 1 ]]; then
