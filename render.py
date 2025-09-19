@@ -73,7 +73,7 @@ def render_sets(dataset : ModelParams,
         bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
         background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
 
-        render_set(dataset.model_path, scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background, interp, extension, generate_points_path, mask_path)
+        render_set(dataset.model_path, scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background, interp, extension, generate_points_path, mask_path, seg=seg)
 
 if __name__ == "__main__":
     # Set up command line argument parser

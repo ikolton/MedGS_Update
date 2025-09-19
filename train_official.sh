@@ -6,7 +6,7 @@
 OBJECTS=("s0564_vertebrae")
 for OBJECT in "${OBJECTS[@]}"; do
     DIR="$OBJECT"
-    DATA="/net/tscratch/people/plgmarzol/Datasets/vegas/vegas_data_trim/${OBJECT}/seg/"
+    DATA=
 
     echo "====================================================="
     echo " Processing: $OBJECT"
