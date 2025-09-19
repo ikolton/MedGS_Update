@@ -10,10 +10,10 @@ set -euo pipefail
 ENV_NAME="medgs"          # name of the conda environment that will be created/used
 PY_VER="3.8"              # python version for the conda environment
 
-DO_INSTALL=1              # 1 = install dependencies
+DO_INSTALL=0              # 1 = install dependencies
 
-DATASET_DIR="./data/prostate"            # path to your training dataset (folder with original/0000.png etc.)
-MODEL_DIR="./output/prostate"              # path where training outputs (model checkpoints, renderings) will be saved
+DATASET_DIR="" #"./data/prostate"            # path to your training dataset (folder with original/0000.png etc.)
+MODEL_DIR="" #"./output/prostate"              # path where training outputs (model checkpoints, renderings) will be saved
 
 PIPELINE_MODE="seg"          # "img" (default) or "seg" — type of training/rendering pipeline
 RENDER_INTERP="1"         # interpolation factor during rendering (1 = no interpolation, 2 = double frames, etc.)
@@ -25,7 +25,7 @@ TRAIN_BATCH_SIZE=""       # training batch size (empty = default)
 
 MESH_INPUT="./output"             # parent directory containing case/model subfolders with seg/render/*.png
 MESH_OUTPUT="./output/mesh"            # directory where .ply meshes will be saved
-MESH_THRESH="150"         # iso-level threshold for marching cubes
+MESH_THRESH="0"         # iso-level threshold for marching cubes
 INTER="1"               # interpolation factor for mesh generation (1 = no interpolation, 2 = double frames, etc.)
 
 # ---- PyTorch CUDA wheel channel (manual) ----

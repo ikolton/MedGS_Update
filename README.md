@@ -36,7 +36,7 @@ __Abstract:__ Multi-modal three-dimensional (3D) medical imaging data, derived f
 
 # Installation Guide
 
-_If you have conda whole setup can be also done by running run.sh. It installs the environment, runs training, render and mesh generation. Mesh can be visualized using:_ ```python vismesh.py ./output/mesh/prostate.ply```
+_If you have conda, the entire setup can also be done by running run.sh. This script installs the environment, runs training, rendering, and mesh generation. Meshes can be visualized using:_ ```python vismesh.py ./output/mesh/prostate.ply```
 
 
 Follow the steps below to set up the project environment:
@@ -75,7 +75,7 @@ pip3 install -r requirements.txt
 # Tutorial
 ### 1. Training
 ```sh
-python3 train.py -s <dataset_dir> -m <output_dir> #for usg, mri or simmilar images
+python3 train.py -s <dataset_dir> -m <output_dir> #for usg, mri or similar images
 or
 python3 train.py -s <dataset_dir> -m <output_dir> --pipeline seg #for training on binary segmentations
 ```
@@ -92,7 +92,7 @@ The data directory needs to have a structure like this:
 
 #### Other options
  
-* ```--random_background``` Randomizes background during training. Use it if you want to train MedGS on a video with a transparent backround.
+* ```--random_background``` Randomizes background during training. Use it if you want to train MedGS on a video with a transparent background.
 * ```--poly_degree <int>``` Use to change polynomial degree of folded gaussians.
 * ```--batch_size <int>``` Batch size.
 

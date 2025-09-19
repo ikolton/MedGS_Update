@@ -179,7 +179,10 @@ def training(gs_type, dataset: ModelParams, opt, pipe, testing_iterations, savin
 
 
         sigma = gaussians.get_sigma
-        sigma_loss = penalize_outside_range(sigma, 2/(num_frames), 1)
+        if iteration < 20000:
+            sigma_loss = penalize_outside_range(sigma, 2./num_frames, 1)
+        else:
+            sigma_loss = 0.0
 
         render_curr = outputs["camera"]["render"]
         gt_curr = outputs["camera"]["gt"]
@@ -196,7 +199,7 @@ def training(gs_type, dataset: ModelParams, opt, pipe, testing_iterations, savin
         gt_prev_warped = None
         gt_next_warped = None
 
-        loss = 2.0 * Ll1 + 0.5 * Ll1_inter +  0.25 * sigma_loss + 1 * ssim_loss
+        loss = 2.0 * Ll1 + 0.5 * Ll1_inter +  0.25 * sigma_loss + 0.25 * ssim_loss
 
         psnr_ = psnr(render_curr, gt_curr).mean().double()
         loss.backward()
@@ -301,6 +304,8 @@ def training_binary_segmentation(gs_type, dataset: ModelParams, opt, pipe, testi
     prev_next_overlap = 2 if dataset.camera == "mirror" else 1
     print("prev_next_overlap", prev_next_overlap)
 
+    interpolation = 1
+
     for iteration in range(first_iter, opt.iterations + 1):
         os.makedirs(f"{scene.model_path}/xyz", exist_ok=True)
         if save_xyz and (iteration % 5000 == 1 or iteration == opt.iterations):
@@ -328,7 +333,7 @@ def training_binary_segmentation(gs_type, dataset: ModelParams, opt, pipe, testi
 
         outputs = []
 
-        interpolation = 1
+
         outputs_inter = {}
 
         for name, camera in cameras.items():
@@ -359,11 +364,6 @@ def training_binary_segmentation(gs_type, dataset: ModelParams, opt, pipe, testi
         gt_curr = outputs[0]["gt"]
         Ll1 = l1_loss(data["render"], data["gt"])
 
-        if interpolation > 1:
-            Ll1_inter = l1_loss(data_inter["render"], data_inter["gt"])
-        else:
-            Ll1_inter = 0
-
         data['mask_t'] = torch.stack(data['visibility_filter'], dim=-1).any(dim=1)
         ssim_loss = 1.0 - ssim(data['render'], data['gt'])
         L_flow_temporal = torch.tensor(0.0, device='cuda', dtype=data['render'].dtype)
@@ -371,8 +371,8 @@ def training_binary_segmentation(gs_type, dataset: ModelParams, opt, pipe, testi
         gt_prev_warped = None
         gt_next_warped = None
     
-        loss = 2.0 * Ll1 + 0.5 * Ll1_inter + 0.0 * ssim_loss + 0.5 * sigma_loss #+ 0 * L_flow_temporal #+ 0.1 * sigma_loss ##
-    
+        loss = 2.0 * Ll1 + 0.5 * sigma_loss
+        
         psnr_ = psnr(data["render"], data["gt"]).mean().double()
         loss.backward()
 

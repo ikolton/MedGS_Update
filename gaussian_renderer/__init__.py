@@ -23,19 +23,6 @@ import numpy as np
 import os
 
 
-
-def knn_predict(query_points, X, y, k=10):
-    dists = torch.cdist(query_points, X) ** 2
-    knn_indices = dists.topk(k, largest=False).indices
-    knn_labels = y[knn_indices]
-    return knn_labels.sum(dim=1) > (k // 2)
-
-def transform_vertices_function(vertices, c=1):
-    vertices = vertices[:, [0, 2, 1]]
-    vertices[:, 1] = -vertices[:, 1]
-    vertices *= c
-    return vertices
-
 def norm_gauss(m, sigma, t):
     log = ((m - t)**2 / sigma**2) / -2
     return torch.exp(log)
@@ -132,12 +119,12 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
     if seg == True:
         mask1 = (delta > 0.1).all(dim=1) 
         s = scales[:,[0,-1]]
-        mask2 = (s > 0.00001).all(dim=1)
+        mask2 = (s > 0.000001).all(dim=1)
         mask = mask1 & mask2
     else:
     # this is for usg
         mask1 = (delta > 0.1).all(dim=1)
-        s = scales[:,[0,-1]]
+        # s = scales[:,[0,-1]]
         mask = mask1
 
  
