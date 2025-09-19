@@ -10,7 +10,6 @@ def main(ply_file):
     print("Triangles:", len(mesh.triangles))
     o3d.visualization.draw_geometries([mesh], mesh_show_back_face=True)
 
-
     # o3d.visualization.draw_geometries([mesh])
 
 if __name__ == "__main__":

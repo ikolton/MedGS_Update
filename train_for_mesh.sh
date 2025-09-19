@@ -24,14 +24,14 @@ for OBJECT in "${OBJECTS[@]}"; do
     rm -rf "$DIR"
   
     #  Train
-    python3 train.py -s "$DATA" -m "$DIR" --poly_degree 1 --pipeline seg
+    python train.py -s "$DATA" -m "$DIR" --poly_degree 2 --pipeline seg
 
     # Render
     echo "Rendering..."
-    python3 render.py --model_path "$DIR/" --interp 8
+    python render.py --model_path "$DIR/" --interp 8
 
     # Make video
-    python3 video.py \
+    python video.py \
         --input_folder "$DIR/render" \
         --output_folder "$DIR" \
         --output_name "video.mp4" \

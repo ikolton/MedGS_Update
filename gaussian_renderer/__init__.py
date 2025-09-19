@@ -127,12 +127,8 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
         # s = scales[:,[0,-1]]
         mask = mask1
 
- 
-
-
     if modify_func != None:
         means3D, scales, rotations = modify_func(means3D, scales, rotations, time[0])
-
 
     # If precomputed colors are provided, use them. Otherwise, if it is desired to precompute colors
     # from SHs in Python, do it. If not, then SH -> RGB conversion will be done by rasterizer.
