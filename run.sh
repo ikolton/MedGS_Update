@@ -10,7 +10,7 @@ set -euo pipefail
 ENV_NAME="medgs"          # name of the conda environment that will be created/used
 PY_VER="3.8"              # python version for the conda environment
 
-DO_INSTALL=1              # 1 = install dependencies, 0 = skip (useful if already installed)
+DO_INSTALL=1              # 1 = install dependencies
 
 DATASET_DIR="./data/prostate"            # path to your training dataset (folder with original/0000.png etc.)
 MODEL_DIR="./output/prostate"              # path where training outputs (model checkpoints, renderings) will be saved
