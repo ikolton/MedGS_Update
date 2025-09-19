@@ -7,8 +7,8 @@ Multi-modal three-dimensional (3D) medical imaging data, derived from ultrasound
 <br>
 
 <div align="center">
-  <img src="assets/rotation.gif" alt="Example results" width="60%" style="max-width:600px;" />
-  <p><em>Example reconstruction results from MedGS.</em></p>
+  <img src="assets/heart.gif" alt="Example results" width="60%" style="max-width:600px;" />
+  <p><em>Example reconstruction results from MedGS. More below.</em></p>
 </div>
 
 </div>
@@ -31,6 +31,7 @@ Multi-modal three-dimensional (3D) medical imaging data, derived from ultrasound
     - [3. Creating mesh](#3-creating-mesh)
       - [Expected input layout](#expected-input-layout)
       - [Run](#run)
+- [Example results](#example-results)
 
 
 # Installation Guide
@@ -129,6 +130,32 @@ For each case the script looks for PNG masks in `seg/render/` and (optionally) o
 - `--inter` - interpolation scale
 
  <!-- ![Rotation demo](assets/rotation.gif) -->
+
+# Example results
+
+<div align="center">
+
+  <!-- Top row: 2 gifs side by side -->
+  <div style="display: flex; justify-content: center; gap: 40px; margin-bottom: 20px;">
+    <div style="text-align: center;">
+      <img src="assets/kidney.gif" alt="Kidney" width="500px" />
+      <p><strong>Kidney</strong></p>
+    </div>
+    <div style="text-align: center;">
+      <img src="assets/lung.gif" alt="Lung" width="500px" />
+      <p><strong>Lung</strong></p>
+    </div>
+  </div>
+
+  <!-- Bottom row: 1 gif centered -->
+  <div style="text-align: center;">
+    <img src="assets/vertebrae.gif" alt="Vertebrae" width="500px" />
+    <p><strong>Vertebrae</strong></p>
+  </div>
+
+  <p><em>Example reconstruction results from MedGS.</em></p>
+</div>
+
 
 
 </div>
