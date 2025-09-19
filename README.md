@@ -35,7 +35,7 @@ Multi-modal three-dimensional (3D) medical imaging data, derived from ultrasound
 
 # Installation Guide
 
-_Whole setup can be also done by running run.sh. It installs the environment, runs training, render and mesh generation. Mesh can be visualized using:_ ```python vismesh.py ./output/mesh/prostate.ply```
+_If you have conda whole setup can be also done by running run.sh. It installs the environment, runs training, render and mesh generation. Mesh can be visualized using:_ ```python vismesh.py ./output/mesh/prostate.ply```
 
 
 Follow the steps below to set up the project environment:
@@ -97,7 +97,7 @@ The data directory needs to have a structure like this:
 
 ### 2. Rendering
 ```sh
-python3 render.py --model_path <model_dir> --interp <interp> --pipeline <img,segmentation>
+python3 render.py --model_path <model_dir> --interp <interp> --pipeline <img,seg>
 ```
 * ```--model_path``` Path to the model directory.
 * ```--interp``` Multiplier for the rendered frames (interpolation). Use ```1``` for the original number of frames (default), ```2``` for doubling the frames, etc. We achieved good results with around 8.

@@ -10,7 +10,7 @@ set -euo pipefail
 ENV_NAME="medgs"          # name of the conda environment that will be created/used
 PY_VER="3.8"              # python version for the conda environment
 
-DO_INSTALL=1              # 1 = install dependencies, 0 = skip (useful if already installed)
+DO_INSTALL=1              # 1 = install dependencies
 
 DATASET_DIR="./data/prostate"            # path to your training dataset (folder with original/0000.png etc.)
 MODEL_DIR="./output/prostate"              # path where training outputs (model checkpoints, renderings) will be saved
@@ -160,101 +160,6 @@ run_mesh() {
 
   echo "Meshes saved to: $MESH_OUTPUT"
 }
-
-print_usage() {
-  cat <<'USAGE'
-MedGS runner (WSL + conda). Run from the repo root.
-
-Set CUDA wheel channel at the top of the script:
-  TORCH_CUDA_CHANNEL=cu118   # (default) works for CUDA >= 11.7
-  # or cu121 / cu124 / cpu
-
-Basic install only:
-  ./run_medgs.sh
-
-Install with custom env name / Python:
-  ./run_medgs.sh --env-name medgs --python 3.8
-
-End-to-end (install → train → render → mesh):
-  ./run_medgs.sh \
-    --dataset /path/to/data \
-    --model-out /path/to/out_model \
-    --render-interp 8 \
-    --pipeline img \
-    --mesh-input /path/with/case_subfolders \
-    --mesh-output /path/to/meshes \
-    --mesh-thresh 150
-
-Segmentation training + randomized background + custom hyperparams:
-  ./run_medgs.sh \
-    --dataset /data/cardiac_pngs \
-    --model-out /outputs/medgs_case1 \
-    --seg \
-    --random-background \
-    --poly-degree 3 \
-    --batch-size 4 \
-    --render-interp 8 \
-    --pipeline seg \
-    --mesh-input /outputs \
-    --mesh-output /outputs/ply \
-    --mesh-thresh 150
-
-Skip installation if already installed:
-  ./run_medgs.sh --skip-install ...other flags...
-
-Flags:
-  --env-name NAME           Conda env name (default: medgs)
-  --python X.Y              Python version for env (default: 3.8)
-  --skip-install            Don’t (re)install dependencies
-
-Training:
-  --dataset PATH            Dataset directory (frames: original/{0000.png,...}, mirror/)
-  --model-out PATH          Model output directory
-  --seg                     Use segmentation pipeline (adds: --pipeline seg)
-  --random-background       Randomize background during training
-  --poly-degree N           Polynomial degree for folded Gaussians
-  --batch-size N            Training batch size
-
-Rendering:
-  --render-interp N         Interpolation multiplier (default: 1)
-  --pipeline img|seg        Render mode; default img
-
-Mesh:
-  --mesh-input PATH         Parent directory with case subfolders (each containing seg/render/*.png)
-  --mesh-output PATH        Output directory for <case>.ply meshes
-  --mesh-thresh N           Marching cubes iso-level (default: 150)
-USAGE
-}
-
-# -------- Parse CLI --------
-if [[ $# -eq 0 ]]; then
-  print_usage
-fi
-
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --env-name) ENV_NAME="${2:?}"; shift 2 ;;
-    --python) PY_VER="${2:?}"; shift 2 ;;
-    --skip-install) DO_INSTALL=0; shift ;;
-
-    --dataset) DATASET_DIR="${2:?}"; shift 2 ;;
-    --model-out|--model-dir) MODEL_DIR="${2:?}"; shift 2 ;;
-    --seg) TRAIN_USE_SEG=1; shift ;;
-    --random-background) TRAIN_RANDOM_BG=1; shift ;;
-    --poly-degree) TRAIN_POLY_DEGREE="${2:?}"; shift 2 ;;
-    --batch-size) TRAIN_BATCH_SIZE="${2:?}"; shift 2 ;;
-
-    --render-interp) RENDER_INTERP="${2:?}"; shift 2 ;;
-    --pipeline) PIPELINE_MODE="${2:?}"; shift 2 ;;
-
-    --mesh-input) MESH_INPUT="${2:?}"; shift 2 ;;
-    --mesh-output) MESH_OUTPUT="${2:?}"; shift 2 ;;
-    --mesh-thresh) MESH_THRESH="${2:?}"; shift 2 ;;
-
-    -h|--help) print_usage; exit 0 ;;
-    *) die "Unknown option: $1" ;;
-  esac
-done
 
 # -------- Execute --------
 require_at_repo_root
