@@ -16,7 +16,7 @@ DATASET_DIR="./data/prostate"            # path to your training dataset (folder
 MODEL_DIR="./output/prostate"              # path where training outputs (model checkpoints, renderings) will be saved
 
 PIPELINE_MODE="seg"          # "img" (default) or "seg" — type of training/rendering pipeline
-RENDER_INTERP="8"         # interpolation factor during rendering (1 = no interpolation, 2 = double frames, etc.)
+RENDER_INTERP="1"         # interpolation factor during rendering (1 = no interpolation, 2 = double frames, etc.)
 
 TRAIN_USE_SEG=1          # 1 = train on segmentation pipeline (binary masks), 0 = normal images
 TRAIN_RANDOM_BG=0         # 1 = randomize background, 0 = keep dataset background
@@ -26,7 +26,7 @@ TRAIN_BATCH_SIZE=""       # training batch size (empty = default)
 MESH_INPUT="./output"             # parent directory containing case/model subfolders with seg/render/*.png
 MESH_OUTPUT="./output/mesh"            # directory where .ply meshes will be saved
 MESH_THRESH="150"         # iso-level threshold for marching cubes
-INTER="8"               # interpolation factor for mesh generation (1 = no interpolation, 2 = double frames, etc.)
+INTER="1"               # interpolation factor for mesh generation (1 = no interpolation, 2 = double frames, etc.)
 
 # ---- PyTorch CUDA wheel channel (manual) ----
 # Valid options (per PyTorch download site):
