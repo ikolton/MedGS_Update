@@ -97,7 +97,7 @@ The data directory needs to have a structure like this:
 
 ### 2. Rendering
 ```sh
-python3 render.py --model_path <model_dir> --interp <interp> --pipeline <img,segmentation>
+python3 render.py --model_path <model_dir> --interp <interp> --pipeline <img,seg>
 ```
 * ```--model_path``` Path to the model directory.
 * ```--interp``` Multiplier for the rendered frames (interpolation). Use ```1``` for the original number of frames (default), ```2``` for doubling the frames, etc. We achieved good results with around 8.
