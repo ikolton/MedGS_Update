@@ -17,11 +17,11 @@ def extract_numbers(filename):
     return (0, 0)
 
 
-def main(input_folder, output_folder, thresh=150):
+def main(input_folder, output_folder, thresh=150, inter=8):
     os.makedirs(output_folder, exist_ok=True)
 
     for filename in os.listdir(input_folder):
-        render_folder = os.path.join(input_folder, filename, "seg/render")
+        render_folder = os.path.join(input_folder, filename, "render")
         nifti_files = glob.glob(os.path.join(input_folder, filename, "*.nii*"))
 
         if not os.path.isdir(render_folder):
@@ -60,7 +60,7 @@ def main(input_folder, output_folder, thresh=150):
 
         verts, faces, normals, values = measure.marching_cubes(
             volume, level=thresh,
-            spacing=[spacing[2] / 8, spacing[0], spacing[1]]
+            spacing=[spacing[2] / inter, spacing[0], spacing[1]]
         )
 
         mesh = o3d.geometry.TriangleMesh()
@@ -81,4 +81,4 @@ if __name__ == "__main__":
     parser.add_argument("--inter", type=int, default=8, help="Interpolation factor")
     args = parser.parse_args()
 
-    main(args.input, args.output, args.thresh)
+    main(args.input, args.output, args.thresh, args.inter)

@@ -466,7 +466,7 @@ def training_report(tb_writer, iteration, Ll1, loss, l2_loss, elapsed, testing_i
 
     # Report test and samples of training set
 
-    if iteration % 1000 ==0 :
+    if tb_writer and iteration % 1000 ==0 :
         tb_writer.add_images("temporal/render_curr", render_curr, global_step=iteration, dataformats="CHW")
         tb_writer.add_images("temporal/gt_curr", gt_curr, global_step=iteration, dataformats="CHW")
         if gt_prev_warped is not None:
@@ -486,7 +486,7 @@ def training_report(tb_writer, iteration, Ll1, loss, l2_loss, elapsed, testing_i
         psnrs = []
         times = []
         for idx, viewpoint in enumerate(config['cameras']):
-            image = torch.clamp(renderFunc(viewpoint, scene.gaussians, *renderArgs)["render"], 0.0, 1.0, seg=seg)
+            image = torch.clamp(renderFunc(viewpoint, scene.gaussians, *renderArgs, seg=seg)["render"], 0.0, 1.0)
             gt_image = torch.clamp(viewpoint.original_image.to("cuda"), 0.0, 1.0)
             if tb_writer and (idx < 5):
                 tb_writer.add_images(config['name'] + "_view_{}/render".format(viewpoint.image_name),
@@ -565,6 +565,7 @@ if __name__ == "__main__":
     torch.autograd.set_detect_anomaly(args.detect_anomaly)
 
     if args.pipeline == "seg":
+        print("Training with binary segmentation loss")
         training_binary_segmentation(
             args.gs_type,
             lp.extract(args), op.extract(args), pp.extract(args),
@@ -572,6 +573,7 @@ if __name__ == "__main__":
             args.start_checkpoint, args.debug_from, args.save_xyz, args.use_dff
         )
     else:
+        print("Training with photometric loss")
         training(
             args.gs_type,
             lp.extract(args), op.extract(args), pp.extract(args),

@@ -5,3 +5,6 @@ trimesh
 torch 
 torchvision
 plyfile
+nibabel
+open3d
+scikit-image
