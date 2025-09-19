@@ -7,7 +7,7 @@ Multi-modal three-dimensional (3D) medical imaging data, derived from ultrasound
 <br>
 
 <div align="center">
-  <img src="assets/rotation.gif" alt="Example results" width="60%" />
+  <img src="assets/rotation.gif" alt="Example results" width="60%" style="max-width:600px;" />
   <p><em>Example reconstruction results from MedGS.</em></p>
 </div>
 
