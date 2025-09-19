@@ -28,7 +28,8 @@ def render_set( model_path,
                 interp, 
                 extension,
                 generate_points_path,
-                mask_path):
+                mask_path,
+                seg=False):
 
     render_dir_masked = os.path.join(model_path, "render_masked")
     render_dir = os.path.join(model_path, "render")
@@ -48,7 +49,7 @@ def render_set( model_path,
             rendering = render(
                 view, gaussians, pipeline, background,
                 interp=interp, interp_idx=i, modify_func=modify_func,
-                idx=idx, generate_points_path=generate_points_path, mask_means=mask_means, train=False
+                idx=idx, generate_points_path=generate_points_path, mask_means=mask_means, train=False, seg=seg
             )["render"].cpu()
 
             render_path = render_dir_masked if mask_path != "-1" else render_dir
@@ -63,7 +64,8 @@ def render_sets(dataset : ModelParams,
                 interp : int,
                 extension: str,
                 generate_points_path,
-                mask_path):
+                mask_path
+                seg=False):
     with torch.no_grad():
         gaussians = gaussianModelRender['gs'](dataset.sh_degree)
         scene = Scene(dataset, gaussians, load_iteration=iteration, shuffle=False)
@@ -90,6 +92,7 @@ if __name__ == "__main__":
     parser.add_argument("--extension", type=str, default=".png")
     parser.add_argument("--mask_path", type=str, default="-1")
     parser.add_argument("--generate_points_path", type=str, default="-1")
+    parser.add_argument("--pipeline", type=str, choices=["img", "seg"], default="img")
 
     args = get_combined_args(parser)
     model.gs_type = "gs"
@@ -103,4 +106,4 @@ if __name__ == "__main__":
     # Initialize system state (RNG)
     safe_state(args.quiet)
 
-    render_sets(model.extract(args), args.iteration, pipeline.extract(args), args.skip_train, args.skip_test, args.interp, args.extension, generate_points_path = args.generate_points_path, mask_path=args.mask_path)
+    render_sets(model.extract(args), args.iteration, pipeline.extract(args), args.skip_train, args.skip_test, args.interp, args.extension, generate_points_path = args.generate_points_path, mask_path=args.mask_path, seg=(args.pipeline=="seg"))

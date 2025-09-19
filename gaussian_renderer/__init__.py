@@ -40,7 +40,7 @@ def norm_gauss(m, sigma, t):
     log = ((m - t)**2 / sigma**2) / -2
     return torch.exp(log)
 
-def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, scaling_modifier = 1.0, override_color = None, interp=1, interp_idx=0, modify_func=None, idx = 0, generate_points_path=None, mask_means=None, train=False, iter=0, alpha = 0):
+def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, scaling_modifier = 1.0, override_color = None, interp=1, interp_idx=0, modify_func=None, idx = 0, generate_points_path=None, mask_means=None, train=False, iter=0, alpha = 0, seg = False):
     """
     Render the scene. 
     
@@ -119,35 +119,6 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
     for i, poly_weight in enumerate(poly_weights):
         means3D = means3D + poly_weight * (center_gaussians ** (i+1))
 
-    if mask_means is not None:
-        if len(mask_means)<11:
-            mask3 = torch.zeros((means3D.shape[0]), dtype=bool, device=means3D.device)
-        else:
-            mask_means_expanded = mask_means.unsqueeze(0)
-
-            batch_size = 10000
-            num_points = means3D.shape[0]
-
-            num_batches = (num_points + batch_size - 1) // batch_size
-            mask3_all = []
-
-            for batch_idx in range(num_batches):
-                start_idx = batch_idx * batch_size
-                end_idx = min((batch_idx + 1) * batch_size, num_points)
-                means3D_batch = means3D[start_idx:end_idx].cuda()
-                means3D_expanded = means3D_batch.unsqueeze(1)
-                distances = torch.sum((means3D_expanded - mask_means_expanded) ** 2, dim=2)
-                _, indices = torch.topk(distances, k=10, largest=False, sorted=False)
-                neighbors = mask_means[indices[:, 1:]]
-                centroids = torch.mean(neighbors, dim=1)
-                distance_to_centroids = torch.norm(means3D_batch - centroids, dim=1)
-                mask3_chunk = distance_to_centroids < 0.005
-                mask3_all.append(mask3_chunk)
-
-            mask3 = torch.cat(mask3_all, dim=0)
-
-    else:
-        mask3 = torch.ones((means3D.shape[0]), dtype=bool).cuda()
 
     means3D = torch.cat([means3D[:, 0].unsqueeze(1),
                         torch.zeros(means3D[:, 0].shape).unsqueeze(1).cuda(),
@@ -157,23 +128,20 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
     delta = norm_gauss(pc.get_m.squeeze(), pc.get_sigma.squeeze(), time[0]).unsqueeze(-1)
     scales = delta * pc.get_scaling
 
-    mask1 = (delta > 0.1).all(dim=1)
-    s = scales[:,[0,-1]]
-    #mask2 = (s > 0.00001).all(dim=1)
-    mask = mask1 #& mask2
+   # this is for mask
+    if seg == True:
+        mask1 = (delta > 0.1).all(dim=1) 
+        s = scales[:,[0,-1]]
+        mask2 = (s > 0.00001).all(dim=1)
+        mask = mask1 & mask2
+    else:
+    # this is for usg
+        mask1 = (delta > 0.1).all(dim=1)
+        s = scales[:,[0,-1]]
+        mask = mask1
 
-    if iter % 500 == 0:
-        print("MASK1", mask1.sum())
-        #print("MASK2", mask2.sum())
-        #§print("MASK", mask.sum())
+ 
 
-        #result = torch.count_nonzero(mask) / torch.count_nonzero(mask3)
-        #print(round(result.item(), 3))
-
-    if generate_points_path != "-1":
-        save_dir = f"{generate_points_path}/means3Dmasked"
-        os.makedirs(save_dir, exist_ok=True)
-        torch.save(means3D[mask], f"{save_dir}/{idx:05d}.pt")
 
     if modify_func != None:
         means3D, scales, rotations = modify_func(means3D, scales, rotations, time[0])

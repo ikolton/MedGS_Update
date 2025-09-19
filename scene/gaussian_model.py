@@ -562,7 +562,7 @@ class GaussianModel:
             big_points_vs = self.max_radii2D > max_screen_size
             big_points_ws = self.get_scaling.max(dim=1).values > 0.1 * 1.1
             prune_mask = torch.logical_or(torch.logical_or(prune_mask, big_points_vs), big_points_ws)
-            # prune_mask = torch.logical_or(prune_mask, big_points_vs)
+            #prune_mask = torch.logical_or(prune_mask, big_points_vs)
         self.prune_points(prune_mask)
 
         torch.cuda.empty_cache()

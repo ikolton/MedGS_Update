@@ -204,7 +204,7 @@ def render(viewpoint_camera, pc_fg : Union[GaussianModel, PointsGaussianModel], 
         scales = fg_dict['scales']
     
     # Rasterize visible Gaussians to image, obtain their radii (on screen). 
-    rendered_image, radii = rasterizer(
+    rendered_image, radii, _ = rasterizer(
         means3D = means3D,
         means2D = means2D,
         shs = None,
