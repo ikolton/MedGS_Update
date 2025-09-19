@@ -64,7 +64,7 @@ def render_sets(dataset : ModelParams,
                 interp : int,
                 extension: str,
                 generate_points_path,
-                mask_path
+                mask_path,
                 seg=False):
     with torch.no_grad():
         gaussians = gaussianModelRender['gs'](dataset.sh_degree)

@@ -123,6 +123,7 @@ For each case the script looks for PNG masks in `seg/render/` and (optionally) o
 - `--input` – parent directory with case subfolders (as above)  
 - `--output` – destination directory for meshes (`<case>.ply`)  
 - `--thresh` – iso-level for marching cubes (on PNG intensity scale)
+- `--inter` - interpolation scale
 
  <!-- ![Rotation demo](assets/rotation.gif) -->
 
