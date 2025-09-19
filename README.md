@@ -35,6 +35,9 @@ Multi-modal three-dimensional (3D) medical imaging data, derived from ultrasound
 
 # Installation Guide
 
+_Whole setup can be also done by running run.sh. It installs the environment, runs training, render and mesh generation. Mesh can be visualized using:_ ```python vismesh.py ./output/mesh/prostate.ply```
+
+
 Follow the steps below to set up the project environment:
 ### Requirements
  - CUDA-ready GPU with Compute Capability 7.0+
