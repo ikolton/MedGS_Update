@@ -1,6 +1,12 @@
 <div align="center"> 
 <h1> MedGS: Gaussian Splatting for Multi-Modal 3D Medical Imaging </h1>
 
+
+<p align="center">
+  <a href="https://arxiv.org/abs/2509.16806"><img src="https://img.shields.io/badge/arXiv-2509.16806-b31b1b.svg" alt="arXiv"></a>
+</p>
+
+
 __Abstract:__ Multi-modal three-dimensional (3D) medical imaging data, derived from ultrasound, magnetic resonance imaging (MRI), and potentially computed tomography (CT), provide a widely adopted approach for non-invasive anatomical visualization. Accurate modeling, registration, and visualization in this setting depend on surface reconstruction and frame-to-frame interpolation. Traditional methods often face limitations due to image noise and incomplete information between frames. To address these challenges, we present MedGS, a semi-supervised neural implicit surface reconstruction framework that employs a Gaussian Splatting (GS)-based interpolation mechanism. In this framework, medical imaging data are represented as consecutive two-dimensional (2D) frames embedded in 3D space and modeled using Gaussian-based distributions. This representation enables robust frame interpolation and high-fidelity surface reconstruction across imaging modalities. As a result, MedGS offers more efficient training than traditional neural implicit methods. Its explicit GS-based representation enhances noise robustness, allows flexible editing, and supports precise modeling of complex anatomical structures with fewer artifacts. These features make MedGS highly suitable for scalable and practical applications in medical imaging.
 
 <!-- TODO -->
