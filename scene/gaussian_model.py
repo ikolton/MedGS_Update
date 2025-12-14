@@ -1,14 +1,3 @@
-#
-# Copyright (C) 2023, Inria
-# GRAPHDECO research group, https://team.inria.fr/graphdeco
-# All rights reserved.
-#
-# This software is free for non-commercial, research and evaluation use 
-# under the terms of the LICENSE.md file.
-#
-# For inquiries contact  george.drettakis@inria.fr
-#
-
 import torch
 import numpy as np
 from utils.general_utils import inverse_sigmoid, get_expon_lr_func, build_rotation
@@ -51,6 +40,12 @@ class GaussianModel:
         self._scaling = torch.empty(0)
         self._rotation = torch.empty(0)
         self._opacity = torch.empty(0)
+
+        # NEW: segmentation head parameters (not initialized until Stage-2)
+        self._features_dc_seg = torch.empty(0)
+        self._features_rest_seg = torch.empty(0)
+        self._opacity_seg = torch.empty(0)
+
         self.max_radii2D = torch.empty(0)
         self.xyz_gradient_accum = torch.empty(0)
         self.m = torch.empty(0)
@@ -66,40 +61,131 @@ class GaussianModel:
         self.frames = frames
         self.setup_functions()
 
+    # ------------------------------------------------------------------
+    # Checkpointing (extended to optionally store seg head, BC with old)
+    # ------------------------------------------------------------------
     def capture(self):
-        return (
-            self.active_sh_degree,
-            self._xyz,
-            self._features_dc,
-            self._features_rest,
-            self._scaling,
-            self._rotation,
-            self._opacity,
-            self.max_radii2D,
-            self.xyz_gradient_accum,
-            self.denom,
-            self.optimizer.state_dict(),
-            self.spatial_lr_scale,
-        )
-    
-    def restore(self, model_args, training_args):
-        (self.active_sh_degree, 
-        self._xyz, 
-        self._features_dc, 
-        self._features_rest,
-        self._scaling, 
-        self._rotation, 
-        self._opacity,
-        self.max_radii2D, 
-        xyz_gradient_accum, 
-        denom,
-        opt_dict, 
-        self.spatial_lr_scale) = model_args
-        self.training_setup(training_args)
-        self.xyz_gradient_accum = xyz_gradient_accum
-        self.denom = denom
-        self.optimizer.load_state_dict(opt_dict)
+        """
+        Return a dict with all state needed to restore this model,
+        including segmentation head and temporal parameters.
+        """
+        return {
+            "version": 2,
+            "active_sh_degree": self.active_sh_degree,
+            "_xyz": self._xyz,
+            "_features_dc": self._features_dc,
+            "_features_rest": self._features_rest,
+            "_scaling": self._scaling,
+            "_rotation": self._rotation,
+            "_opacity": self._opacity,
+            "max_radii2D": self.max_radii2D,
+            "xyz_gradient_accum": self.xyz_gradient_accum,
+            "denom": self.denom,
+            "optimizer_state": self.optimizer.state_dict() if self.optimizer is not None else None,
+            "spatial_lr_scale": self.spatial_lr_scale,
 
+            # NEW: temporal / motion-related parameters
+            "m": self.m,
+            "sigma": self.sigma,
+            "_w1": self._w1,
+            "time_func": self.time_func,
+
+            # NEW: polynomial degree
+            "polynomial_degree": self.polynomial_degree,
+
+            # Segmentation head (may be empty if not initialized yet)
+            "_opacity_seg": self._opacity_seg,
+            "_features_dc_seg": self._features_dc_seg,
+            "_features_rest_seg": self._features_rest_seg,
+        }
+
+    def restore(self, model_args, training_args=None, load_optimizer=True):
+        """
+        Restore from either:
+          - old tuple-format checkpoints (no temporal / seg head),
+          - or new dict-format checkpoints (with temporal and seg head).
+
+        training_args:
+          - if not None: rebuild optimizer & schedulers using training_args
+          - if None: do not build an optimizer (inference / rendering mode)
+        load_optimizer:
+          - if True and optimizer_state is present: load it
+          - if False: skip loading optimizer state (inference)
+        """
+        # --------------------------------------------------------------
+        # Old tuple/list format
+        # --------------------------------------------------------------
+        if isinstance(model_args, (tuple, list)):
+            (self.active_sh_degree,
+             self._xyz,
+             self._features_dc,
+             self._features_rest,
+             self._scaling,
+             self._rotation,
+             self._opacity,
+             self.max_radii2D,
+             xyz_gradient_accum,
+             denom,
+             opt_dict,
+             self.spatial_lr_scale) = model_args
+
+            self.xyz_gradient_accum = xyz_gradient_accum
+            self.denom = denom
+
+            if training_args is not None:
+                self.training_setup(training_args)
+                if load_optimizer and opt_dict is not None:
+                    self.optimizer.load_state_dict(opt_dict)
+            else:
+                self.optimizer = None
+            return
+
+        # --------------------------------------------------------------
+        # New dict format
+        # --------------------------------------------------------------
+        assert isinstance(model_args, dict), "Unexpected checkpoint format"
+
+        self.active_sh_degree = model_args["active_sh_degree"]
+        self._xyz = model_args["_xyz"]
+        self._features_dc = model_args["_features_dc"]
+        self._features_rest = model_args["_features_rest"]
+        self._scaling = model_args["_scaling"]
+        self._rotation = model_args["_rotation"]
+        self._opacity = model_args["_opacity"]
+        self.max_radii2D = model_args["max_radii2D"]
+        self.xyz_gradient_accum = model_args["xyz_gradient_accum"]
+        self.denom = model_args["denom"]
+        self.spatial_lr_scale = model_args["spatial_lr_scale"]
+
+        # Temporal / motion-related parameters
+        self.m = model_args["m"]
+        self.sigma = model_args["sigma"]
+        self._w1 = model_args["_w1"]
+        self.time_func = model_args["time_func"]
+
+        # Polynomial degree: load if present, otherwise infer from _w1
+        self.polynomial_degree = model_args.get("polynomial_degree", None)
+        if self.polynomial_degree is None:
+            self.polynomial_degree = self._w1.shape[-1] // 2
+
+        # Segmentation head
+        self._opacity_seg = model_args.get("_opacity_seg", torch.empty_like(self._opacity))
+        self._features_dc_seg = model_args.get("_features_dc_seg", torch.empty_like(self._features_dc))
+        self._features_rest_seg = model_args.get("_features_rest_seg", torch.empty_like(self._features_rest))
+
+        opt_state = model_args.get("optimizer_state", None)
+
+        if training_args is not None:
+            self.training_setup(training_args)
+            if load_optimizer and opt_state is not None:
+                self.optimizer.load_state_dict(opt_state)
+        else:
+            self.optimizer = None
+
+
+    # ------------------------------------------------------------------
+    # Accessors
+    # ------------------------------------------------------------------
     @property
     def get_scaling(self):
         s3 = torch.ones(self._scaling.shape[0], 1).cuda() * self.eps_s3
@@ -140,16 +226,38 @@ class GaussianModel:
             return torch.nn.functional.softmax(self.time_func.squeeze(), dim=0)
         else:
             return self.time_func
-    
-    @property
-    def get_features(self):
-        features_dc = self._features_dc
-        features_rest = self._features_rest
+
+    # NEW: head-aware feature getter
+    def get_features_head(self, head: str = "img"):
+        if head == "img":
+            features_dc = self._features_dc
+            features_rest = self._features_rest
+        elif head == "seg":
+            features_dc = self._features_dc_seg
+            features_rest = self._features_rest_seg
+        else:
+            raise ValueError(f"Unknown head: {head}")
         return torch.cat((features_dc, features_rest), dim=1)
     
     @property
+    def get_features(self):
+        # Backward-compatible: default to image head
+        return self.get_features_head("img")
+
+    # NEW: head-aware opacity getter
+    def get_opacity_head(self, head: str = "img"):
+        if head == "img":
+            base = self._opacity
+        elif head == "seg":
+            base = self._opacity_seg
+        else:
+            raise ValueError(f"Unknown head: {head}")
+        return self.opacity_activation(base)
+
+    @property
     def get_opacity(self):
-        return self.opacity_activation(self._opacity)
+        # Backward-compatible: default to image head
+        return self.get_opacity_head("img")
 
     def get_covariance(self, scaling_modifier = 1):
         return self.covariance_activation(self.get_scaling, scaling_modifier, self._rotation)
@@ -158,6 +266,60 @@ class GaussianModel:
         if self.active_sh_degree < self.max_sh_degree:
             self.active_sh_degree += 1
 
+    # ------------------------------------------------------------------
+    # Segmentation-head specific helpers (Stage-2 will call these)
+    # ------------------------------------------------------------------
+    def init_seg_head_from_img(self):
+        """
+        Initialize segmentation head parameters by copying the current
+        image head parameters. Intended to be called after Stage-1
+        training when starting Stage-2 segmentation training.
+        """
+        self._opacity_seg = nn.Parameter(self._opacity.detach().clone().requires_grad_(True))
+        self._features_dc_seg = nn.Parameter(self._features_dc.detach().clone().requires_grad_(True))
+        self._features_rest_seg = nn.Parameter(self._features_rest.detach().clone().requires_grad_(True))
+
+    def freeze_geometry_and_img_head(self):
+        """
+        Freeze geometry, temporal terms, and image appearance head.
+        Used in Stage-2 when only segmentation head should be trained.
+        """
+        param_list = [
+            self._xyz,
+            self._features_dc,
+            self._features_rest,
+            self._opacity,
+            self._scaling,
+            self._rotation,
+            self.m,
+            self.sigma,
+            self._w1,
+        ]
+        # time_func is a Parameter only when use_dff=True
+        if isinstance(self.time_func, torch.nn.Parameter):
+            param_list.append(self.time_func)
+
+        for p in param_list:
+            if isinstance(p, (torch.nn.Parameter, torch.Tensor)):
+                p.requires_grad_(False)
+
+    def seg_head_parameters(self):
+        """
+        Return list of parameters belonging to the segmentation head.
+        This is what Stage-2 optimizer will be built on.
+        """
+        params = []
+        if isinstance(self._opacity_seg, torch.nn.Parameter):
+            params.append(self._opacity_seg)
+        if isinstance(self._features_dc_seg, torch.nn.Parameter):
+            params.append(self._features_dc_seg)
+        if isinstance(self._features_rest_seg, torch.nn.Parameter):
+            params.append(self._features_rest_seg)
+        return params
+
+    # ------------------------------------------------------------------
+    # Initialization from point cloud (unchanged for img head)
+    # ------------------------------------------------------------------
     def create_from_pcd(self, pcd : BasicPointCloud, spatial_lr_scale : float):
         self.spatial_lr_scale = spatial_lr_scale
         fused_point_cloud = torch.tensor(np.asarray(pcd.points)).float().cuda()
@@ -180,7 +342,6 @@ class GaussianModel:
             self.time_func = nn.Parameter(time_func.unsqueeze(-1).requires_grad_(True))
         else:
             print("NOT USING DFF")
-            # self.time_func = torch.linspace(0,1, self.frames-1, device = "cuda") / (self.frames - 1)
             self.time_func = torch.ones(self.frames, device="cuda") / self.frames
             print(self.time_func)
 
@@ -200,7 +361,12 @@ class GaussianModel:
         self.sigma = nn.Parameter(sigma.requires_grad_(True))
         self._w1 = nn.Parameter(w1.requires_grad_(True))
 
+        # Note: segmentation head is intentionally NOT initialized here.
+        # Stage-2 will call init_seg_head_from_img() after loading a checkpoint.
 
+    # ------------------------------------------------------------------
+    # Optimizer / training setup
+    # ------------------------------------------------------------------
     def training_setup(self, training_args):
         self.percent_dense = training_args.percent_dense
         self.xyz_gradient_accum = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
@@ -376,17 +542,28 @@ class GaussianModel:
         self.polynomial_degree = len(w1_names) // 2
         self.active_sh_degree = self.max_sh_degree
 
+        # Seg head is not loaded from PLY; Stage-2 can initialize from img head
+        self._opacity_seg = torch.empty_like(self._opacity)
+        self._features_dc_seg = torch.empty_like(self._features_dc)
+        self._features_rest_seg = torch.empty_like(self._features_rest)
+
+    # ------------------------------------------------------------------
+    # Optimizer state surgery for densification (unchanged)
+    # ------------------------------------------------------------------
     def replace_tensor_to_optimizer(self, tensor, name):
         optimizable_tensors = {}
         for group in self.optimizer.param_groups:
             if group["name"] == name:
                 stored_state = self.optimizer.state.get(group['params'][0], None)
-                stored_state["exp_avg"] = torch.zeros_like(tensor)
-                stored_state["exp_avg_sq"] = torch.zeros_like(tensor)
+                if stored_state is not None:
+                    stored_state["exp_avg"] = torch.zeros_like(tensor)
+                    stored_state["exp_avg_sq"] = torch.zeros_like(tensor)
 
-                del self.optimizer.state[group['params'][0]]
-                group["params"][0] = nn.Parameter(tensor.requires_grad_(True))
-                self.optimizer.state[group['params'][0]] = stored_state
+                    del self.optimizer.state[group['params'][0]]
+                    group["params"][0] = nn.Parameter(tensor.requires_grad_(True))
+                    self.optimizer.state[group['params'][0]] = stored_state
+                else:
+                    group["params"][0] = nn.Parameter(tensor.requires_grad_(True))
 
                 optimizable_tensors[group["name"]] = group["params"][0]
         return optimizable_tensors
@@ -431,6 +608,9 @@ class GaussianModel:
         self.denom = self.denom[valid_points_mask]
         self.m_denom = self.m_denom[valid_points_mask]
         self.max_radii2D = self.max_radii2D[valid_points_mask]
+
+        # Note: seg head is not pruned here; in Approach A Stage-2 we disable
+        # densification and reinitialize seg head, so this is safe.
 
     def cat_tensors_to_optimizer(self, tensors_dict):
         optimizable_tensors = {}
@@ -515,7 +695,6 @@ class GaussianModel:
         new_features_dc = self._features_dc[selected_pts_mask].repeat(N,1,1)
         new_features_rest = self._features_rest[selected_pts_mask].repeat(N,1,1)
         new_opacity = self._opacity[selected_pts_mask].repeat(N,1)
-        #new_m = self.m[selected_pts_mask].repeat(N, 1) + torch.logit((torch.sigmoid(padded_grad_m_tmp[selected_pts_mask]) * self.get_sigma[selected_pts_mask].squeeze(-1).squeeze(-1)).unsqueeze(-1).repeat(N, 1))
         new_m = self.m[selected_pts_mask].repeat(N, 1)
         new_sigma = self.sigma[selected_pts_mask].repeat(N, 1, 1)
         new_w1 = self._w1[selected_pts_mask].repeat(N, 1)
@@ -562,7 +741,6 @@ class GaussianModel:
             big_points_vs = self.max_radii2D > max_screen_size
             big_points_ws = self.get_scaling.max(dim=1).values > 0.1 * 1.1
             prune_mask = torch.logical_or(torch.logical_or(prune_mask, big_points_vs), big_points_ws)
-            #prune_mask = torch.logical_or(prune_mask, big_points_vs)
         self.prune_points(prune_mask)
 
         torch.cuda.empty_cache()

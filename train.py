@@ -263,21 +263,58 @@ def training(gs_type, dataset: ModelParams, opt, pipe, testing_iterations, savin
     with open(scene.model_path + f"/time.json", 'w') as fp:
         json.dump(time_dict, fp, indent=True)
 
-def training_binary_segmentation(gs_type, dataset: ModelParams, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint,
-             debug_from, save_xyz, use_dff):
+def training_binary_segmentation(
+    gs_type,
+    dataset: ModelParams,
+    opt,
+    pipe,
+    testing_iterations,
+    saving_iterations,
+    checkpoint_iterations,
+    checkpoint,
+    debug_from,
+    save_xyz,
+    use_dff,
+    seg_head_only: bool = False,   # NEW
+):
     time_start = time.process_time()
     init_time = time.time()
     first_iter = 0
     tb_writer = prepare_output_and_logger(dataset)
     frames = len(os.listdir(f'{dataset.source_path}/original'))
     print("frames", frames)
-    gaussians = gaussianModel[gs_type](dataset.sh_degree, dataset.poly_degree, frames, use_dff = use_dff)
 
+    gaussians = gaussianModel[gs_type](dataset.sh_degree, dataset.poly_degree, frames, use_dff=use_dff)
     scene = Scene(dataset, gaussians, shuffle=False)
+
+    # Standard training setup (will be overridden for seg_head_only later)
     gaussians.training_setup(opt)
+
     if checkpoint:
         (model_params, first_iter) = torch.load(checkpoint)
         gaussians.restore(model_params, opt)
+
+    # Segmentation-head-only Stage-2 mode:
+    # - geometry + img head are frozen
+    # - seg head params initialized from img head
+    # - optimizer rebuilt on seg head only
+    if seg_head_only:
+        first_iter = 0
+        print("Segmentation head only mode: freezing geometry & img head, optimizing segmentation head.")
+        gaussians.init_seg_head_from_img()
+        gaussians.freeze_geometry_and_img_head()
+        seg_params = gaussians.seg_head_parameters()
+        gaussians.optimizer = torch.optim.Adam(
+            [
+                {
+                    "params": seg_params,
+                    "lr": opt.feature_lr,
+                    "name": "seg_head",
+                }
+            ],
+            lr=0.0,
+            eps=1e-15,
+        )
 
     bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
     background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
@@ -290,7 +327,7 @@ def training_binary_segmentation(gs_type, dataset: ModelParams, opt, pipe, testi
     viewpoint_stack = None
 
     ema_loss_for_log = 0.0
-    ema_psnr_for_log = 0.0 
+    ema_psnr_for_log = 0.0
     progress_bar = tqdm(range(first_iter, opt.iterations), desc="Training progress")
     first_iter += 1
     viewpoint_cameras = scene.getTrainCameras()
@@ -305,6 +342,7 @@ def training_binary_segmentation(gs_type, dataset: ModelParams, opt, pipe, testi
     print("prev_next_overlap", prev_next_overlap)
 
     interpolation = 1
+    head_name = "seg" if seg_head_only else "img"   # NEW: which appearance head to use
 
     for iteration in range(first_iter, opt.iterations + 1):
         os.makedirs(f"{scene.model_path}/xyz", exist_ok=True)
@@ -312,6 +350,10 @@ def training_binary_segmentation(gs_type, dataset: ModelParams, opt, pipe, testi
             torch.save(gaussians.get_xyz, f"{scene.model_path}/xyz/{iteration}.pt")
 
         iter_start.record()
+
+        # For seg_head_only we keep constant LR (no xyz group in optimizer),
+        # but calling update_learning_rate is harmless because it only
+        # touches the group named "xyz", which we didn't define in that mode.
         gaussians.update_learning_rate(iteration)
 
         # Every 1000 its we increase the levels of SH up to a maximum degree
@@ -325,27 +367,31 @@ def training_binary_segmentation(gs_type, dataset: ModelParams, opt, pipe, testi
         camera = viewpoint_cameras[idx]
         camera_next = viewpoint_cameras[idx + prev_next_overlap] if idx + prev_next_overlap <= num_frames - 1 else None
 
-
-        cameras = {"camera_prev": camera_prev ,"camera": camera, "camera_next": camera_next}
+        cameras = {"camera_prev": camera_prev, "camera": camera, "camera_next": camera_next}
 
         if (iteration - 1) == debug_from:
             pipe.debug = True
 
         outputs = []
-
-
         outputs_inter = {}
 
-        for name, camera in cameras.items():
-            if not camera:
-                continue    
-            render_pkg = render(camera, gaussians, pipe, bg, train=True, iter=iteration, seg=True)
-            render_pkg["gt"] = camera.get_image(bg, opt.random_background).cuda()
+        for name, cam in cameras.items():
+            if not cam:
+                continue
+            render_pkg = render(
+                cam,
+                gaussians,
+                pipe,
+                bg,
+                train=True,
+                iter=iteration,
+                seg=True,
+                head=head_name,   # NEW: use selected head
+            )
+            render_pkg["gt"] = cam.get_image(bg, opt.random_background).cuda()
             outputs.append(render_pkg)
 
-                
         data = {}
-    
         for k in outputs[0].keys():
             if k == "viewspace_points":
                 data[k] = [output[k] for output in outputs]
@@ -353,26 +399,28 @@ def training_binary_segmentation(gs_type, dataset: ModelParams, opt, pipe, testi
                 data[k] = [output[k] for output in outputs]
             elif k in ["render", "gt", "mask"]:
                 data[k] = torch.stack([output[k] for output in outputs], dim=0)
-                
 
         sigma = gaussians.get_sigma
-        if iteration < 20000:
-            sigma_loss = penalize_outside_range(sigma, 2./num_frames, 1)
+        if iteration < 20000 and not seg_head_only:
+            # In seg_head_only, geometry (including sigma) is frozen,
+            # so we do not regularize it further.
+            sigma_loss = penalize_outside_range(sigma, 2.0 / num_frames, 1)
         else:
             sigma_loss = 0.0
+
         render_curr = outputs[0]["render"]
         gt_curr = outputs[0]["gt"]
         Ll1 = l1_loss(data["render"], data["gt"])
 
-        data['mask_t'] = torch.stack(data['visibility_filter'], dim=-1).any(dim=1)
-        ssim_loss = 1.0 - ssim(data['render'], data['gt'])
-        L_flow_temporal = torch.tensor(0.0, device='cuda', dtype=data['render'].dtype)
-        # #
+        data["mask_t"] = torch.stack(data["visibility_filter"], dim=-1).any(dim=1)
+        ssim_loss = 1.0 - ssim(data["render"], data["gt"])
+        L_flow_temporal = torch.tensor(0.0, device="cuda", dtype=data["render"].dtype)
         gt_prev_warped = None
         gt_next_warped = None
-    
+
+        # Same loss form as before, but sigma_loss may be 0 in seg_head_only mode
         loss = 2.0 * Ll1 + 0.5 * sigma_loss
-        
+
         psnr_ = psnr(data["render"], data["gt"]).mean().double()
         loss.backward()
 
@@ -383,39 +431,66 @@ def training_binary_segmentation(gs_type, dataset: ModelParams, opt, pipe, testi
             ema_psnr_for_log = 0.4 * psnr_ + 0.6 * ema_psnr_for_log
             total_point = gaussians._xyz.shape[0]
             if iteration % 100 == 0:
-                progress_bar.set_postfix({"Loss": f"{ema_loss_for_log:.{7}f}",
-                                          "psnr": f"{psnr_:.{2}f}",
-                                          "point":f"{total_point}"})
+                progress_bar.set_postfix(
+                    {
+                        "Loss": f"{ema_loss_for_log:.{7}f}",
+                        "psnr": f"{psnr_:.{2}f}",
+                        "point": f"{total_point}",
+                    }
+                )
                 progress_bar.update(100)
             if iteration == opt.iterations:
                 progress_bar.close()
 
             # Log and save
-            training_report(tb_writer, iteration, Ll1, loss, l1_loss, iter_start.elapsed_time(iter_end),
-                            testing_iterations, scene, render, (pipe, background), L_flow_temporal, render_curr, gt_curr, gt_prev_warped, gt_next_warped, gaussians.get_sigma, seg=True)
-            if (iteration in saving_iterations):
+            training_report(
+                tb_writer,
+                iteration,
+                Ll1,
+                loss,
+                l1_loss,
+                iter_start.elapsed_time(iter_end),
+                testing_iterations,
+                scene,
+                render,
+                (pipe, background),
+                L_flow_temporal,
+                render_curr,
+                gt_curr,
+                gt_prev_warped,
+                gt_next_warped,
+                gaussians.get_sigma,
+                seg=True,
+                head=head_name,   # NEW
+            )
+            if iteration in saving_iterations:
                 print("\n[ITER {}] Saving Gaussians".format(iteration))
                 scene.save(iteration)
 
-
-            if iteration < 20000:
-                radii_batch = torch.stack(data['radii'], dim=-1).max(dim=-1)[0]
+            # Densification and opacity reset: disable in seg_head_only mode
+            if iteration < 20000 and not seg_head_only:
+                radii_batch = torch.stack(data["radii"], dim=-1).max(dim=-1)[0]
                 visibility_filter_batch = data["mask_t"]
                 gaussians.max_radii2D[visibility_filter_batch] = torch.max(
                     gaussians.max_radii2D[visibility_filter_batch],
-                    radii_batch[visibility_filter_batch]
+                    radii_batch[visibility_filter_batch],
                 )
-                xyscreen = data['viewspace_points']
+                xyscreen = data["viewspace_points"]
                 gaussians.add_densification_stats(xyscreen, visibility_filter_batch)
-                    
+
                 if iteration > opt.densify_from_iter and iteration % opt.densification_interval == 0:
                     print("\n[ITER {}] Densifying Gaussians".format(iteration))
                     size_threshold = 20 if iteration > opt.opacity_reset_interval else None
-                    gaussians.densify_and_prune(opt.densify_grad_threshold, 0.01, scene.cameras_extent,
-                                                size_threshold)
+                    gaussians.densify_and_prune(
+                        opt.densify_grad_threshold,
+                        0.01,
+                        scene.cameras_extent,
+                        size_threshold,
+                    )
 
                 if iteration % opt.opacity_reset_interval == 0 or (
-                        dataset.white_background and iteration == opt.densify_from_iter):
+                    dataset.white_background and iteration == opt.densify_from_iter
+                ):
                     print("\n[ITER {}] Reset opacity ".format(iteration))
                     gaussians.reset_opacity()
 
@@ -424,15 +499,17 @@ def training_binary_segmentation(gs_type, dataset: ModelParams, opt, pipe, testi
                 gaussians.optimizer.step()
                 gaussians.optimizer.zero_grad(set_to_none=True)
 
-            if (iteration in checkpoint_iterations):
+            if iteration in checkpoint_iterations:
                 print("\n[ITER {}] Saving Checkpoint".format(iteration))
                 torch.save((gaussians.capture(), iteration), scene.model_path + "/chkpnt" + str(iteration) + ".pth")
+
     time_elapsed = time.process_time() - time_start
     time_dict = {}
     time_dict["time"] = time_elapsed
     time_dict["elapsed"] = time.time() - init_time
-    with open(scene.model_path + f"/time.json", 'w') as fp:
+    with open(scene.model_path + f"/time.json", "w") as fp:
         json.dump(time_dict, fp, indent=True)
+
 
 def prepare_output_and_logger(args):
     if not args.model_path:
@@ -457,7 +534,8 @@ def prepare_output_and_logger(args):
 
 
 def training_report(tb_writer, iteration, Ll1, loss, l2_loss, elapsed, testing_iterations, scene: Scene, renderFunc,
-                    renderArgs, temporal_loss, render_curr, gt_curr, gt_prev_warped, gt_next_warped, sigma, seg=False):
+                    renderArgs, temporal_loss, render_curr, gt_curr, gt_prev_warped, gt_next_warped, sigma, seg=False, head="img"):
+
     if tb_writer:
         tb_writer.add_scalar('train_loss_patches/l1_loss', Ll1.item(), iteration)
         tb_writer.add_scalar('train_loss_patches/total_loss', loss.item(), iteration)
@@ -486,7 +564,12 @@ def training_report(tb_writer, iteration, Ll1, loss, l2_loss, elapsed, testing_i
         psnrs = []
         times = []
         for idx, viewpoint in enumerate(config['cameras']):
-            image = torch.clamp(renderFunc(viewpoint, scene.gaussians, *renderArgs, seg=seg)["render"], 0.0, 1.0)
+            image = torch.clamp(
+                renderFunc(viewpoint, scene.gaussians, *renderArgs, seg=seg, head=head)["render"],
+                0.0,
+                1.0,
+            )
+
             gt_image = torch.clamp(viewpoint.original_image.to("cuda"), 0.0, 1.0)
             if tb_writer and (idx < 5):
                 tb_writer.add_images(config['name'] + "_view_{}/render".format(viewpoint.image_name),
@@ -541,6 +624,9 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, default=3)
     parser.add_argument("--use_dff", type=bool, default=False)
     parser.add_argument("--pipeline", type=str, choices=["img", "seg"], default="img")
+    parser.add_argument("--seg_head_only", action="store_true",
+                    help="Freeze geometry & img head, train only segmentation head (requires --start_checkpoint).")
+
 
     lp = ModelParams(parser)
     args, _ = parser.parse_known_args(sys.argv[1:])
@@ -570,7 +656,8 @@ if __name__ == "__main__":
             args.gs_type,
             lp.extract(args), op.extract(args), pp.extract(args),
             args.test_iterations, args.save_iterations, args.checkpoint_iterations,
-            args.start_checkpoint, args.debug_from, args.save_xyz, args.use_dff
+            args.start_checkpoint, args.debug_from, args.save_xyz, args.use_dff,
+            seg_head_only=args.seg_head_only,   # NEW
         )
     else:
         print("Training with photometric loss")
