@@ -77,14 +77,8 @@ def render_set(
     seg=False,
     head="img",
     pipeline_name="img",
+    idx_offset: int = 0,
 ):
-    """
-    Render a set of views for a given Gaussian model.
-
-    - pipeline_name="img"  -> outputs to model_path/render_img/
-    - pipeline_name="seg"  -> outputs to model_path/render_mask/
-    """
-
     if pipeline_name == "seg":
         render_dir = os.path.join(model_path, "render_mask")
     else:
@@ -92,13 +86,19 @@ def render_set(
 
     os.makedirs(render_dir, exist_ok=True)
 
-    for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
+    import gc
+
+    for local_idx, view in enumerate(tqdm(views, desc="Rendering progress")):
+        idx = idx_offset + local_idx
+
         for i in range(interp):
             mask_means = None
             if mask_path != "-1":
                 file_path = os.path.join(mask_path, "means3Dmasked", f"{idx:05d}.pt")
                 if os.path.exists(file_path):
-                    mask_means = torch.load(file_path)[:, [0, -1]]
+                    mm = torch.load(file_path, map_location="cpu")
+                    mask_means = mm[:, [0, -1]]
+                    del mm
 
             rendering = render(
                 view,
@@ -114,10 +114,31 @@ def render_set(
                 train=False,
                 seg=seg,
                 head=head,
-            )["render"].cpu()
+            )["render"].detach().cpu()
 
             file_name = f"{idx:05d}_{i}{extension}"
             torchvision.utils.save_image(rendering, os.path.join(render_dir, file_name))
+
+            del rendering, mask_means
+
+        if (idx % 50) == 0:
+            gc.collect()
+            torch.cuda.empty_cache()
+
+
+def _drop_camera_images(cam_list):
+    # Render nie potrzebuje GT obrazów; zwolnij RAM jeśli są załadowane w kamerach.
+    for c in cam_list:
+        for attr in [
+            "original_image", "image", "gt_image",
+            "original_mask", "mask", "alpha_mask",
+            "depth", "depth_image"
+        ]:
+            if hasattr(c, attr):
+                try:
+                    setattr(c, attr, None)
+                except Exception:
+                    pass
 
 
 def render_sets(
@@ -130,70 +151,116 @@ def render_sets(
     extension: str,
     generate_points_path,
     mask_path,
-    seg: bool = False,
+    pipeline_mode: str = "img",   # "img" | "seg" | "both"
+    chunks: int = 1,
 ):
     with torch.no_grad():
-        # Build Scene from PLY to get cameras (as before)
-        gaussians_scene = gaussianModelRender["gs"](dataset.sh_degree)
-        scene = Scene(dataset, gaussians_scene, load_iteration=iteration, shuffle=False)
+        frames = len(os.listdir(f"{dataset.source_path}/original"))
 
         bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
         background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
 
-        if seg:
-            # Segmentation rendering: try to use checkpoint (two-head mode),
-            # otherwise fall back to PLY (single-head mode).
-            ckpt_path = find_checkpoint(dataset.model_path, iteration)
-            if ckpt_path is None:
-                print(
-                    "No checkpoint found in model_path; "
-                    "rendering segmentation from PLY model (single-head mode, using image head)."
-                )
-                gaussians = scene.gaussians
-                head_name = "img"
-                pipeline_name = "seg"
-            else:
-                print(f"Loading checkpoint for segmentation head from {ckpt_path}")
-                gaussians = gaussianModel["gs"](
-                    dataset.sh_degree,
-                    dataset.poly_degree,
-                    frames=0,
-                    use_dff=False,
-                )
-                model_state, _ = torch.load(ckpt_path, map_location="cuda")
-                gaussians.restore(model_state, training_args=None, load_optimizer=False)
+        ckpt_path = find_checkpoint(dataset.model_path, iteration)
 
-                # Decide if this checkpoint really has a seg head
-                if hasattr(gaussians, "_opacity_seg") and gaussians._opacity_seg.numel() == gaussians._opacity.numel():
-                    head_name = "seg"   # two-head / joint model
-                    print("Using segmentation head (two-head joint model).")
-                else:
-                    head_name = "img"   # fallback: single-head model
-                    print("Checkpoint has no valid seg head; using image head for seg pipeline (single-head mode).")
+        model_state = None
+        loaded_iter = iteration
 
-                pipeline_name = "seg"
+        if ckpt_path is not None:
+            model_state, loaded_iter = torch.load(ckpt_path, map_location="cuda")
+
+        # --- Zbuduj Scene TYLKO RAZ (kamery + ewentualnie gaussians z PLY) ---
+        dummy = gaussianModel["gs"](dataset.sh_degree, dataset.poly_degree, frames, use_dff=False)
+        try:
+            scene = Scene(dataset, dummy, load_iteration=loaded_iter, shuffle=False)
+        except Exception:
+            # awaryjnie bez iteracji
+            scene = Scene(dataset, dummy, load_iteration=None, shuffle=False)
+
+        # Kamery testowe
+        views_all = scene.getTestCameras()
+        n_views = len(views_all)
+
+        # Zwolnij obrazy z kamer (ważne dla RAM)
+        # (jeśli Scene trzyma też train cameras, spróbuj je też oczyścić)
+        _drop_camera_images(views_all)
+        if hasattr(scene, "train_cameras"):
+            try:
+                _drop_camera_images(scene.train_cameras)
+            except Exception:
+                pass
+
+        # --- Załaduj gaussians do renderu ---
+        if ckpt_path is not None:
+            print(f"Loading checkpoint: {ckpt_path}")
+            gaussians = gaussianModel["gs"](dataset.sh_degree, dataset.poly_degree, frames, use_dff=False)
+            gaussians.restore(model_state, training_args=None, load_optimizer=False)
+            has_seg = gaussians.has_seg_head() if hasattr(gaussians, "has_seg_head") else False
         else:
-            # Photometric rendering: use Gaussians loaded from PLY (as before)
+            print("No checkpoint found; using PLY/Scene gaussians.")
             gaussians = scene.gaussians
-            head_name = "img"
-            pipeline_name = "img"
+            has_seg = False
 
+        def do_img(views_slice, idx_offset):
+            render_set(
+                dataset.model_path,
+                loaded_iter,
+                views_slice,
+                gaussians,
+                pipeline,
+                background,
+                interp,
+                extension,
+                generate_points_path,
+                mask_path,
+                seg=False,
+                head="img",
+                pipeline_name="img",
+                idx_offset=idx_offset,
+            )
 
-        render_set(
-            dataset.model_path,
-            scene.loaded_iter,
-            scene.getTestCameras(),
-            gaussians,
-            pipeline,
-            background,
-            interp,
-            extension,
-            generate_points_path,
-            mask_path,
-            seg=seg,
-            head=head_name,
-            pipeline_name=pipeline_name,
-        )
+        def do_seg(views_slice, idx_offset):
+            head_name = "seg" if has_seg else "img"
+            render_set(
+                dataset.model_path,
+                loaded_iter,
+                views_slice,
+                gaussians,
+                pipeline,
+                background,
+                interp,
+                extension,
+                generate_points_path,
+                mask_path,
+                seg=True,
+                head=head_name,
+                pipeline_name="seg",
+                idx_offset=idx_offset,
+            )
+
+        # --- Chunkowanie widoków (wewnątrz kodu) ---
+        chunks = max(1, int(chunks))
+        per = (n_views + chunks - 1) // chunks
+
+        import gc
+        for c in range(chunks):
+            start = c * per
+            if start >= n_views:
+                break
+            end = min(n_views, start + per)
+            views_slice = views_all[start:end]
+
+            print(f"[render] chunk {c+1}/{chunks}: views {start}..{end-1}")
+
+            if pipeline_mode == "both":
+                do_img(views_slice, start)
+                do_seg(views_slice, start)
+            elif pipeline_mode == "seg":
+                do_seg(views_slice, start)
+            else:
+                do_img(views_slice, start)
+
+            gc.collect()
+            torch.cuda.empty_cache()
 
 
 if __name__ == "__main__":
@@ -213,7 +280,9 @@ if __name__ == "__main__":
     parser.add_argument("--extension", type=str, default=".png")
     parser.add_argument("--mask_path", type=str, default="-1")
     parser.add_argument("--generate_points_path", type=str, default="-1")
-    parser.add_argument("--pipeline", type=str, choices=["img", "seg"], default="img")
+    parser.add_argument("--pipeline", type=str, choices=["img", "seg", "both"], default="img")
+    parser.add_argument("--chunks", type=int, default=1)
+
 
     args = get_combined_args(parser)
     model.gs_type = "gs"
@@ -237,5 +306,6 @@ if __name__ == "__main__":
         args.extension,
         generate_points_path=args.generate_points_path,
         mask_path=args.mask_path,
-        seg=(args.pipeline == "seg"),
+        pipeline_mode=args.pipeline,
+        chunks=args.chunks
     )
