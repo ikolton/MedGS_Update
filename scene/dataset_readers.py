@@ -422,12 +422,12 @@ def CreateCamerasTransforms(path, image2dname, white_background, distances, exte
 
     return cam_infos
 
-# -------------------------
+
 
 sceneLoadTypeCallbacks = {
     "Colmap": readColmapSceneInfo,
     "Blender" : readNerfSyntheticInfo,
     # ------ FROM MIRAGE ------
     "Image": readImage
-    # -------------------------
+    
 }
