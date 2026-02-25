@@ -127,7 +127,6 @@ def render_set(
 
 
 def _drop_camera_images(cam_list):
-    # Render nie potrzebuje GT obrazów; zwolnij RAM jeśli są załadowane w kamerach.
     for c in cam_list:
         for attr in [
             "original_image", "image", "gt_image",
@@ -168,20 +167,19 @@ def render_sets(
         if ckpt_path is not None:
             model_state, loaded_iter = torch.load(ckpt_path, map_location="cuda")
 
-        # --- Zbuduj Scene TYLKO RAZ (kamery + ewentualnie gaussians z PLY) ---
+
         dummy = gaussianModel["gs"](dataset.sh_degree, dataset.poly_degree, frames, use_dff=False)
         try:
             scene = Scene(dataset, dummy, load_iteration=loaded_iter, shuffle=False)
         except Exception:
-            # awaryjnie bez iteracji
+
             scene = Scene(dataset, dummy, load_iteration=None, shuffle=False)
 
-        # Kamery testowe
+
         views_all = scene.getTestCameras()
         n_views = len(views_all)
 
-        # Zwolnij obrazy z kamer (ważne dla RAM)
-        # (jeśli Scene trzyma też train cameras, spróbuj je też oczyścić)
+
         _drop_camera_images(views_all)
         if hasattr(scene, "train_cameras"):
             try:
@@ -189,7 +187,7 @@ def render_sets(
             except Exception:
                 pass
 
-        # --- Załaduj gaussians do renderu ---
+
         if ckpt_path is not None:
             print(f"Loading checkpoint: {ckpt_path}")
             gaussians = gaussianModel["gs"](dataset.sh_degree, dataset.poly_degree, frames, use_dff=False)
@@ -237,7 +235,7 @@ def render_sets(
                 idx_offset=idx_offset,
             )
 
-        # --- Chunkowanie widoków (wewnątrz kodu) ---
+
         chunks = max(1, int(chunks))
         per = (n_views + chunks - 1) // chunks
 

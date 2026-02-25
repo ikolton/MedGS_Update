@@ -388,7 +388,7 @@ def training_binary_segmentation(
                 train=True,
                 iter=iteration,
                 seg=True,
-                head=head_name,   # NEW: use selected head
+                head=head_name,   
             )
             render_pkg["gt"] = cam.get_image(bg, opt.random_background).cuda()
             outputs.append(render_pkg)
@@ -420,7 +420,7 @@ def training_binary_segmentation(
         gt_prev_warped = None
         gt_next_warped = None
 
-        # Same loss form as before, but sigma_loss may be 0 in seg_head_only mode
+
         loss = 2.0 * Ll1 + 0.5 * sigma_loss
 
         psnr_ = psnr(data["render"], data["gt"]).mean().double()
@@ -444,7 +444,7 @@ def training_binary_segmentation(
             if iteration == opt.iterations:
                 progress_bar.close()
 
-            # Log and save
+
             training_report(
                 tb_writer,
                 iteration,
@@ -463,7 +463,7 @@ def training_binary_segmentation(
                 gt_next_warped,
                 gaussians.get_sigma,
                 seg=True,
-                head=head_name,   # NEW
+                head=head_name,  
             )
             if iteration in saving_iterations:
                 print("\n[ITER {}] Saving Gaussians".format(iteration))
@@ -534,10 +534,6 @@ def training_joint(
       - two heads:
           img head -> photometric loss (seg=False, head="img")
           seg head -> segmentation loss (seg=True,  head="seg")
-    No freezing.
-    IMPORTANT: Do NOT add a multi-tensor optimizer group for seg head.
-               Seg tensors must be separate param groups (opacity_seg, f_dc_seg, f_rest_seg),
-               which is handled by GaussianModel.training_setup() if seg head exists.
     """
 
     time_start = time.process_time()
@@ -568,7 +564,7 @@ def training_joint(
     scene_seg = Scene(dataset_seg, gaussians_dummy, shuffle=False)
     scene_seg.gaussians = gaussians
 
-    # Optional resume / init logic
+
     if checkpoint:
         model_params, first_iter = torch.load(checkpoint)
 
@@ -621,7 +617,7 @@ def training_joint(
     assert len(cams_img) == len(cams_seg), "Camera lists must match between datasets"
     num_frames = len(cams_img)
 
-    # Cache GTs (consistent with your current code)
+
     gts_img = [cam.get_image(bg, opt.random_background).cuda() for cam in cams_img]
     gts_seg = [cam.get_image(bg, opt.random_background).cuda() for cam in cams_seg]
 
@@ -650,9 +646,7 @@ def training_joint(
 
         idx = randint(0, num_frames - 1)
 
-        # -------------------------
-        # IMG branch (same structure as your photometric training)
-        # -------------------------
+
         cam_prev_img = cams_img[idx - prev_next_overlap] if idx - prev_next_overlap >= 0 else None
         cam_img = cams_img[idx]
         cam_next_img = cams_img[idx + prev_next_overlap] if idx + prev_next_overlap <= num_frames - 1 else None
@@ -728,9 +722,7 @@ def training_joint(
         loss_img = 2.0 * Ll1_img + 0.5 * Ll1_img_inter + 0.25 * sigma_loss + 0.25 * ssim_loss
         psnr_img = psnr(render_img_curr, gt_img_curr).mean().double()
 
-        # -------------------------
-        # SEG branch (keep segmentation loss form as-is)
-        # -------------------------
+
         cam_prev_seg = cams_seg[idx - prev_next_overlap] if idx - prev_next_overlap >= 0 else None
         cam_seg = cams_seg[idx]
         cam_next_seg = cams_seg[idx + prev_next_overlap] if idx + prev_next_overlap <= num_frames - 1 else None
@@ -764,9 +756,9 @@ def training_joint(
         gt_seg_curr = outputs_seg["camera"]["gt"]
         psnr_seg = psnr(render_seg_curr, gt_seg_curr).mean().double()
 
-        # -------------------------
+        # 
         # Joint loss + backward
-        # -------------------------
+        # 
         loss = lambda_img * loss_img + lambda_seg * loss_seg
         loss.backward()
 
@@ -824,7 +816,7 @@ def training_joint(
                 l1_loss,
                 iter_start.elapsed_time(iter_end),
                 testing_iterations,
-                scene_seg,  # camera set differs; gaussians used inside render() is still the shared one
+                scene_seg, 
                 render,
                 (pipe, background),
                 L_flow_temporal,

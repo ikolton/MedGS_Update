@@ -64,9 +64,9 @@ class GaussianModel:
         self.frames = frames
         self.setup_functions()
 
-    # ------------------------------------------------------------------
+   
     # Small helpers
-    # ------------------------------------------------------------------
+
     def _has_param_group(self, name: str) -> bool:
         if self.optimizer is None:
             return False
@@ -86,9 +86,9 @@ class GaussianModel:
             and self._features_rest_seg.shape[0] == n
         )
 
-    # ------------------------------------------------------------------
-    # Checkpointing (extended to optionally store seg head, BC with old)
-    # ------------------------------------------------------------------
+
+    # Checkpointing 
+
     def capture(self):
         return {
             "version": 2,
@@ -121,7 +121,7 @@ class GaussianModel:
         }
 
     def restore(self, model_args, training_args=None, load_optimizer=True):
-        # Old tuple/list format (no seg head)
+=
         if isinstance(model_args, (tuple, list)):
             (self.active_sh_degree,
             self._xyz,
@@ -139,7 +139,7 @@ class GaussianModel:
             self.xyz_gradient_accum = xyz_gradient_accum
             self.denom = denom
 
-            # seg head absent in old checkpoints
+
             dev = self._opacity.device
             self._opacity_seg = torch.empty(0, device=dev)
             self._features_dc_seg = torch.empty(0, device=dev)
@@ -153,7 +153,7 @@ class GaussianModel:
                 self.optimizer = None
             return
 
-        # New dict format
+
         assert isinstance(model_args, dict), "Unexpected checkpoint format"
 
         self.active_sh_degree = model_args["active_sh_degree"]
@@ -177,7 +177,7 @@ class GaussianModel:
         if self.polynomial_degree is None:
             self.polynomial_degree = self._w1.shape[-1] // 2
 
-        # seg head: default to EMPTY tensors (so has_seg_head() is False unless реально present)
+        # seg head: default to EMPTY tensors=
         dev = self._opacity.device
         self._opacity_seg = model_args.get("_opacity_seg", torch.empty(0, device=dev))
         self._features_dc_seg = model_args.get("_features_dc_seg", torch.empty(0, device=dev))
@@ -191,9 +191,9 @@ class GaussianModel:
                 self.optimizer.load_state_dict(opt_state)
         else:
             self.optimizer = None
-    # ------------------------------------------------------------------
+
     # Accessors
-    # ------------------------------------------------------------------
+
     @property
     def get_scaling(self):
         s3 = torch.ones(self._scaling.shape[0], 1).cuda() * self.eps_s3
@@ -272,9 +272,9 @@ class GaussianModel:
         if self.active_sh_degree < self.max_sh_degree:
             self.active_sh_degree += 1
 
-    # ------------------------------------------------------------------
+  
     # Segmentation head helpers
-    # ------------------------------------------------------------------
+
     def init_seg_head_from_img(self):
         """
         Create seg-head tensors by copying current img head tensors.
@@ -308,8 +308,7 @@ class GaussianModel:
     def seg_head_parameters(self):
         """
         Returns seg-head params (used in seg_head_only mode).
-        NOTE: For joint training, prefer training_setup() which will add
-        seg params as separate optimizer groups (one tensor per group).
+
         """
         params = []
         if isinstance(self._opacity_seg, torch.nn.Parameter):
@@ -320,9 +319,9 @@ class GaussianModel:
             params.append(self._features_rest_seg)
         return params
 
-    # ------------------------------------------------------------------
+  
     # Initialization from point cloud
-    # ------------------------------------------------------------------
+
     def create_from_pcd(self, pcd: BasicPointCloud, spatial_lr_scale: float):
         self.spatial_lr_scale = spatial_lr_scale
         fused_point_cloud = torch.tensor(np.asarray(pcd.points)).float().cuda()
@@ -364,20 +363,16 @@ class GaussianModel:
         self.sigma = nn.Parameter(sigma.requires_grad_(True))
         self._w1 = nn.Parameter(w1.requires_grad_(True))
 
-        # Seg head intentionally not initialized here
 
-    # ------------------------------------------------------------------
+
+
     # Optimizer / training setup
-    # ------------------------------------------------------------------
-# 2) Update training_setup(): add seg-head param groups as SEPARATE groups
-#    (do NOT bundle seg params into one group)
+
+
 
     def training_setup(self, training_args):
         """
         Build optimizer param groups for ALL per-Gaussian tensors.
-        IMPORTANT invariants for densification/pruning code:
-        - each param group must contain exactly ONE tensor in group["params"]
-        - group["name"] keys must match cat/prune/replace logic
         """
 
         self.percent_dense = training_args.percent_dense
@@ -386,10 +381,7 @@ class GaussianModel:
         self.m_gradient_accum = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
         self.m_denom = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
 
-        # ---- Ensure seg-head tensors are nn.Parameters if seg head is present ----
-        # This matters for:
-        #   - optimizer state creation
-        #   - densification cat/prune surgery (expects optimizer-managed params)
+
         if self.has_seg_head():
             if not isinstance(self._features_dc_seg, nn.Parameter):
                 self._features_dc_seg = nn.Parameter(
@@ -421,7 +413,6 @@ class GaussianModel:
             # time_func is global (not per-Gaussian); densification code skips this group by name
             l.append({"params": [self.time_func], "lr": 0.001, "name": "time_func"})
 
-        # ---- Seg-head groups (ONE tensor per group!) ----
         if self.has_seg_head():
             l.extend([
                 {"params": [self._features_dc_seg],   "lr": training_args.feature_lr,        "name": "f_dc_seg"},
@@ -606,14 +597,10 @@ class GaussianModel:
         self.polynomial_degree = len(w1_names) // 2
         self.active_sh_degree = self.max_sh_degree
 
-        # seg head is not stored in PLY; keep EMPTY so has_seg_head() is False
         self._opacity_seg = torch.empty(0, device="cuda")
         self._features_dc_seg = torch.empty(0, device="cuda")
         self._features_rest_seg = torch.empty(0, device="cuda")
-        # ------------------------------------------------------------------
-        # Optimizer state surgery for densification
-        # (UPDATED to keep seg-head tensors aligned when present)
-        # ------------------------------------------------------------------
+
     def replace_tensor_to_optimizer(self, tensor, name):
         optimizable_tensors = {}
         for group in self.optimizer.param_groups:
@@ -696,7 +683,7 @@ class GaussianModel:
         self.sigma = optimizable_tensors["sigma"]
         self._w1 = optimizable_tensors["w1"]
 
-        # --- NEW: seg head pruning ---
+
         if "f_dc_seg" in optimizable_tensors:
             self._features_dc_seg = optimizable_tensors["f_dc_seg"]
         if "f_rest_seg" in optimizable_tensors:
@@ -787,9 +774,9 @@ class GaussianModel:
             "w1": new_w1,
         }
 
-        # --- NEW: seg head extension ---
+
         if self.has_seg_head():
-            # if caller didn't provide, default to cloning img head values
+
             if new_features_dc_seg is None: new_features_dc_seg = new_features_dc
             if new_features_rest_seg is None: new_features_rest_seg = new_features_rest
             if new_opacities_seg is None: new_opacities_seg = new_opacities
@@ -810,7 +797,7 @@ class GaussianModel:
         self.sigma = optimizable_tensors["sigma"]
         self._w1 = optimizable_tensors["w1"]
 
-        # --- NEW: seg head assign ---
+
         if "f_dc_seg" in optimizable_tensors:
             self._features_dc_seg = optimizable_tensors["f_dc_seg"]
         if "f_rest_seg" in optimizable_tensors:
@@ -870,7 +857,7 @@ class GaussianModel:
         new_sigma = self.sigma[selected_pts_mask].repeat(N, 1, 1)
         new_w1 = self._w1[selected_pts_mask].repeat(N, 1)
 
-        # --- NEW: seg head tensors (split) ---
+
         new_features_dc_seg = None
         new_features_rest_seg = None
         new_opacity_seg = None
@@ -924,7 +911,7 @@ class GaussianModel:
         new_sigma = self.sigma[selected_pts_mask]
         new_w1 = self._w1[selected_pts_mask]
 
-        # --- NEW: seg head tensors (clone) ---
+
         new_features_dc_seg = None
         new_features_rest_seg = None
         new_opacities_seg = None

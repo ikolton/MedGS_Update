@@ -149,8 +149,7 @@ def slice_gaussians(pc: GaussianModel, viewpoint_camera, pipe, foreground=False)
 def render(viewpoint_camera, pc_fg : Union[GaussianModel, PointsGaussianModel], pc_bg : GaussianModel, pipe, bg_color : torch.Tensor, scaling_modifier = 1.0, override_color = None, modify_mesh=None):
     """
     Render the scene. 
-    
-    Background tensor (bg_color) must be on GPU!
+
     """
 
     # Set up rasterization configuration

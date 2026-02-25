@@ -44,25 +44,20 @@ def render(
     iter: int = 0,
     alpha: float = 0,
     seg: bool = False,
-    head: str = "img",   # NEW: which appearance head to use ("img" or "seg")
+    head: str = "img",  
 ):
     """
     Render the scene.
-
-    Background tensor (bg_color) must be on GPU!
-    'head' selects which Gaussian appearance head to use:
-      - "img": standard photometric head
-      - "seg": segmentation head (added in approach A)
     """
 
-    # Create zero tensor. We will use it to make pytorch return gradients of the 2D (screen-space) means
+    
     screenspace_points = torch.zeros_like(pc.get_xyz, dtype=pc.get_xyz.dtype, requires_grad=True, device="cuda") + 0
     try:
         screenspace_points.retain_grad()
     except:
         pass
 
-    # Set up rasterization configuration
+    
     tanfovx = math.tan(viewpoint_camera.FoVx * 0.5)
     tanfovy = math.tan(viewpoint_camera.FoVy * 0.5)
     viewpoint_camera.camera_center = viewpoint_camera.camera_center
@@ -87,8 +82,7 @@ def render(
     means3D = _xyz
     means2D = screenspace_points
 
-    # NEW: use head-aware opacity (seg head vs img head)
-    # assumes GaussianModel has get_opacity_head(head: str)
+
     if hasattr(pc, "get_opacity_head"):
         opacity = pc.get_opacity_head(head=head)
     else:
@@ -105,8 +99,7 @@ def render(
     else:
         time = time + (time_next - time) * interp_idx / interp
 
-    # If precomputed 3d covariance is provided, use it. If not, then it will be computed from
-    # scaling / rotation by the rasterizer.
+
     scales = None
     rotations = None
     cov3D_precomp = None
