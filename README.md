@@ -1,5 +1,5 @@
 <div align="center"> 
-<h1> MedGS: Gaussian Splatting for Multi-Modal 3D Medical Imaging </h1>
+<h1> MedGS: Learning 3D Structures from Sequential Medical Imaging with Gaussian Splatting </h1>
 
 __Abstract:__ Multi-modal three-dimensional (3D) medical imaging data, derived from ultrasound, magnetic resonance imaging (MRI), and computed tomography (CT), provide a widely adopted approach for non-invasive anatomical visualization. However, accurate modeling depends on surface reconstruction and frame-to-frame interpolation, where traditional methods often struggle with image noise and incomplete information between sparse frames. To address these challenges, we present MedGS, a novel framework based on Gaussian Splatting (GS) designed for high-fidelity 3D anatomical reconstruction. 
 Uniquely, MedGS employs a multi-task architecture that simultaneously performs frame interpolation and segmentation using a unified geometric representation. By coupling these tasks, the model leverages dense signals from image synthesis to regularize the geometry, enabling high-quality surface extraction even from a limited number of input frames. 
