@@ -8,15 +8,54 @@ offers more efficient training than implicit neural representations and enhances
 
 <br>
 
-
-<div align="center">
-  <img src="assets/aortas.gif" alt="Example results" width="60%" style="max-width:600px;" />
-  <p><em>Example reconstruction results from MedGS. More below.</em></p>
 </div>
 
+# Example results
+
+<div align="center">
+
+<table>
+  <!-- moved previous last row to be first, and added aortas.gif in the same row -->
+  <tr>
+    <td align="center">
+      <img src="assets/kidney_cancer.gif" alt="Kidney with cancer" width="420" /><br/>
+      <strong>Kidney with cancer</strong>
+    </td>
+    <td align="center">
+      <img src="assets/aortas.gif" alt="Example results" width="420" /><br/>
+      <strong>Aortas</strong>
+    </td>
+  </tr>
+
+  <tr>
+    <td align="center">
+      <img src="assets/kidney.gif" alt="Kidney" width="420" /><br/>
+      <strong>Kidney</strong>
+    </td>
+    <td align="center">
+      <img src="assets/lung.gif" alt="Lung" width="420" /><br/>
+      <strong>Lung</strong>
+    </td>
+  </tr>
+
+  <tr>
+    <td align="center">
+      <img src="assets/vertebrae.gif" alt="Vertebrae" width="420" /><br/>
+      <strong>Vertebrae</strong>
+    </td>
+    <td align="center">
+      <img src="assets/heart.gif" alt="Heart" width="420" /><br/>
+      <strong>Heart</strong>
+    </td>
+  </tr>
+</table>
+
+<p><em>Example reconstruction results from MedGS. More below.</em></p>
 </div>
 
 ## Table of Contents
+- [Example results](#example-results)
+  - [Table of Contents](#table-of-contents)
 - [Installation Guide](#installation-guide)
     - [Requirements](#requirements)
     - [1. Download the Repository](#1-download-the-repository)
@@ -39,7 +78,6 @@ offers more efficient training than implicit neural representations and enhances
   - [3. Creating mesh](#3-creating-mesh)
     - [Expected input layout](#expected-input-layout-1)
     - [Run](#run)
-- [Example results](#example-results)
 
 # Installation Guide
 
@@ -304,38 +342,4 @@ python3 slices_to_ply.py \
 - `--thresh` — iso-level for marching cubes (PNG intensity scale)
 - `--inter` — interpolation scale (if supported by your `slices_to_ply.py`)
 
-# Example results
 
-<div align="center">
-
-<table>
-  <tr>
-    <td align="center">
-      <img src="assets/kidney.gif" alt="Kidney" width="420" /><br/>
-      <strong>Kidney</strong>
-    </td>
-    <td align="center">
-      <img src="assets/lung.gif" alt="Lung" width="420" /><br/>
-      <strong>Lung</strong>
-    </td>
-  </tr>
-  <tr>
-    <td align="center">
-      <img src="assets/vertebrae.gif" alt="Vertebrae" width="420" /><br/>
-      <strong>Vertebrae</strong>
-    </td>
-    <td align="center">
-      <img src="assets/heart.gif" alt="Heart" width="420" /><br/>
-      <strong>Heart</strong>
-    </td>
-  </tr>
-  <tr>
-    <td colspan="2" align="center">
-      <img src="assets/kidney_cancer.gif" alt="Kidney with cancer" width="420" /><br/>
-      <strong>Kidney with cancer</strong>
-    </td>
-  </tr>
-</table>
-
-<p><em>Example reconstruction results from MedGS.</em></p>
-</div>
