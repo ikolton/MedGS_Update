@@ -49,8 +49,6 @@ offers more efficient training than implicit neural representations and enhances
     </td>
   </tr>
 </table>
-
-<p><em>Example reconstruction results from MedGS. More below.</em></p>
 </div>
 
 ## Table of Contents
