@@ -312,33 +312,34 @@ python3 slices_to_ply.py \
 
 <div align="center">
 
-  <div style="display: flex; justify-content: center; gap: 40px; margin-bottom: 20px;">
-    <div style="text-align: center;">
-      <img src="assets/kidney.gif" alt="Kidney" width="500px" />
-      <p><strong>Kidney</strong></p>
-    </div>
-    <div style="text-align: center;">
-      <img src="assets/lung.gif" alt="Lung" width="500px" />
-      <p><strong>Lung</strong></p>
-    </div>
-  </div>
+<table>
+  <tr>
+    <td align="center">
+      <img src="assets/kidney.gif" alt="Kidney" width="420" /><br/>
+      <strong>Kidney</strong>
+    </td>
+    <td align="center">
+      <img src="assets/lung.gif" alt="Lung" width="420" /><br/>
+      <strong>Lung</strong>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="assets/vertebrae.gif" alt="Vertebrae" width="420" /><br/>
+      <strong>Vertebrae</strong>
+    </td>
+    <td align="center">
+      <img src="assets/heart.gif" alt="Heart" width="420" /><br/>
+      <strong>Heart</strong>
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center">
+      <img src="assets/kidney_cancer.gif" alt="Kidney with cancer" width="420" /><br/>
+      <strong>Kidney with cancer</strong>
+    </td>
+  </tr>
+</table>
 
-  <div style="display: flex; justify-content: center; gap: 40px; margin-bottom: 20px;">
-      <div style="text-align: center;">
-    <img src="assets/vertebrae.gif" alt="Vertebrae" width="500px" />
-    <p><strong>Vertebrae</strong></p>
-  </div>
-    <div style="text-align: center;">
-      <img src="assets/heart.gif" alt="Lung" width="500px" />
-      <p><strong>Heart</strong></p>
-    </div>
-  </div>
-  <div style="text-align: center;">
-      <img src="assets/kidney_cancer.gif" alt="Lung" width="500px" />
-      <p><strong>Kidney with cancer</strong></p>
-    </div>
-
-
-
-  <p><em>Example reconstruction results from MedGS.</em></p>
+<p><em>Example reconstruction results from MedGS.</em></p>
 </div>
